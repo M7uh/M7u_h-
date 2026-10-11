@@ -142,3 +142,118 @@
     </script>
 </body>
 </html>
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>مشغل الأغاني أوفلاين</title>
+    <style>
+        body { font-family: Tahoma, sans-serif; background: #121212; color: #fff; padding: 20px; text-align: center; }
+        .song-card { background: #1e1e1e; padding: 15px; margin: 10px auto; border-radius: 10px; max-width: 400px; display: flex; flex-direction: column; gap: 10px; }
+        button { background: #1db954; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        button.downloaded { background: #555; }
+        audio { width: 100%; margin-top: 5px; }
+    </style>
+</head>
+<body>
+
+    <h2>قائمة الأغاني (تنسيق أوفلاين)</h2>
+    <div id="playlist"></div>
+
+    <script>
+        // قائمة الأغاني الخاصة بك (ضع روابط التحميل المباشرة هنا)
+        const songs = [
+            { id: 1, title: "الأغنية الأولى", url: "https://example.com/song1.mp3" },
+            { id: 2, title: "الأغنية الثانية", url: "https://example.com/song2.mp3" }
+        ];
+
+        // إعداد قاعدة البيانات المحلية IndexedDB لتخزين الملفات الصوتية
+        let db;
+        const request = indexedDB.open("OfflineMusicDB", 1);
+
+        request.onerror = () => console.log("خطأ في فتح قاعدة البيانات");
+        request.onsuccess = (event) => {
+            db = event.target.result;
+            loadPlaylist();
+        };
+        request.onupgradeneeded = (event) => {
+            db = event.target.result;
+            if (!db.objectStoreNames.contains("songs")) {
+                db.createObjectStore("songs");
+            }
+        };
+
+        function saveAudioToDB(id, blob) {
+            const transaction = db.transaction(["songs"], "readwrite");
+            const store = transaction.objectStore("songs");
+            store.put(blob, id);
+        }
+
+        function getAudioFromDB(id, callback) {
+            const transaction = db.transaction(["songs"], "readonly");
+            const store = transaction.objectStore("songs");
+            const request = store.get(id);
+            request.onsuccess = () => callback(request.result);
+        }
+
+        function loadPlaylist() {
+            const container = document.getElementById("playlist");
+            container.innerHTML = "";
+
+            songs.forEach(song => {
+                const card = document.createElement("div");
+                card.className = "song-card";
+                
+                card.innerHTML = `
+                    <span>${song.title}</span>
+                    <audio id="audio-${song.id}" controls></audio>
+                    <button id="btn-${song.id}" onclick="handlePlayOrDownload(${song.id}, '${song.url}')">تحميل وتشغيل</button>
+                `;
+                container.appendChild(card);
+
+                // التحقق هل الأغنية مخزنة مسبقاً في الهاتف؟
+                getAudioFromDB(song.id, (blob) => {
+                    const audioEl = document.getElementById(`audio-${song.id}`);
+                    const btnEl = document.getElementById(`btn-${song.id}`);
+                    if (blob) {
+                        const audioUrl = URL.createObjectURL(blob);
+                        audioEl.src = audioUrl;
+                        btnEl.innerText = "متوفر أوفلاين ✓";
+                        btnEl.className = "downloaded";
+                    }
+                });
+            });
+        }
+
+        async function handlePlayOrDownload(id, url) {
+            const audioEl = document.getElementById(`audio-${id}`);
+            const btnEl = document.getElementById(`btn-${id}`);
+
+            getAudioFromDB(id, async (blob) => {
+                if (blob) {
+                    // إذا كانت مخزنة، شغّلها فوراً بدون إنترنت
+                    audioEl.play();
+                } else {
+                    // إذا لم تكن مخزنة، قم بتحميلها وحفظها
+                    btnEl.innerText = "جاري التحميل...";
+                    try {
+                        const response = await fetch(url);
+                        const audioBlob = await response.blob();
+                        saveAudioToDB(id, audioBlob);
+
+                        const audioUrl = URL.createObjectURL(audioBlob);
+                        audioEl.src = audioUrl;
+                        audioEl.play();
+
+                        btnEl.innerText = "متوفر أوفلاين ✓";
+                        btnEl.className = "downloaded";
+                    } catch (e) {
+                        btnEl.innerText = "فشل التحميل (تأكد من النت)";
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>
